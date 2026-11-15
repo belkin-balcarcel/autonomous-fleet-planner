@@ -1,0 +1,16 @@
+# Compiled C++ binaries
+*.exe
+*.o
+*.out
+
+# Python virtual environments & cache
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.db
+
+# Node / React frontend
+node_modules/
+dist/
+.env
