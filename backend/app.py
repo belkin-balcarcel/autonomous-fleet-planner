@@ -29,10 +29,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=list(("*",)),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=list(("*",)),
+    allow_headers=list(("*",)),
 )
 
 
@@ -40,25 +40,23 @@ class MissionRequest(BaseModel):
     aircraft_id: str = "VBAT-01"
     start: Tuple[int, int] = (1, 1)
     goal: Tuple[int, int] = (14, 14)
-    no_fly_zones: List[Tuple[int, int]] = [(6, 5), (6, 6), (6, 7), (7, 7), (8, 7)]
+    no_fly_zones: List[Tuple[int, int]] = list(((6, 5), (6, 6), (6, 7), (7, 7), (8, 7)))
     grid_size: int = 20
 
 
 def run_cpp_or_fallback_sim(
     aircraft_id: str, start_lat: float, start_lon: float, dest_lat: float, dest_lon: float
 ) -> List[dict]:
-    """Executes the compiled C++ telemetry engine if available, with a deterministic fallback."""
     exe_path = os.path.join("cpp-engine", "telemetry_sim.exe")
     if os.path.exists(exe_path):
         proc = subprocess.run(
-            [exe_path, aircraft_id, str(start_lat), str(start_lon), str(dest_lat), str(dest_lon)],
+            list((exe_path, aircraft_id, str(start_lat), str(start_lon), str(dest_lat), str(dest_lon))),
             capture_output=True,
             text=True,
             check=True
         )
         return [json.loads(line) for line in proc.stdout.strip().splitlines() if line.strip()]
 
-    # Cross-platform fallback for Linux cloud containers
     packets = []
     lat, lon = start_lat, start_lon
     battery = 100.0
@@ -106,29 +104,30 @@ def simulate_mission(req: MissionRequest):
     if waypoints is None:
         raise HTTPException(status_code=400, detail="No safe route found around no-fly zones.")
 
-    # Map grid coordinates to Dallas-Fort Worth airspace coordinates
+    sx, sy = req.start
+    gx, gy = req.goal
     base_lat, base_lon = 32.7767, -96.7970
-    start_lat = base_lat + req.start * 0.001
-    start_lon = base_lon + req.start * 0.001
-    dest_lat = base_lat + req.goal * 0.001
-    dest_lon = base_lon + req.goal * 0.001
+    start_lat = base_lat + sx * 0.001
+    start_lon = base_lon + sy * 0.001
+    dest_lat = base_lat + gx * 0.001
+    dest_lon = base_lon + gy * 0.001
 
     telemetry = run_cpp_or_fallback_sim(req.aircraft_id, start_lat, start_lon, dest_lat, dest_lon)
-    ticks = [p["tick"] for p in telemetry]
-    batteries = [p["battery_pct"] for p in telemetry]
-    altitudes = [p["altitude_m"] for p in telemetry]
+    ticks = [p.get("tick") for p in telemetry]
+    batteries = [p.get("battery_pct") for p in telemetry]
+    altitudes = [p.get("altitude_m") for p in telemetry]
 
     ml_forecast = predict_battery_ticks_remaining(ticks, batteries)
     anomalies = detect_sensor_anomalies(altitudes)
-    final_packet = telemetry[-1]
+    final_packet = tuple(telemetry)[-1]
 
     mission_id = log_mission(
         aircraft_id=req.aircraft_id,
-        start_coord=f"{req.start},{req.start}",
-        goal_coord=f"{req.goal},{req.goal}",
+        start_coord=f"{sx},{sy}",
+        goal_coord=f"{gx},{gy}",
         waypoint_count=len(waypoints),
-        final_status=final_packet["status"],
-        final_battery_pct=final_packet["battery_pct"]
+        final_status=final_packet.get("status"),
+        final_battery_pct=final_packet.get("battery_pct")
     )
 
     return {
@@ -141,3 +140,11 @@ def simulate_mission(req: MissionRequest):
         "altitude_anomaly_ticks": anomalies,
         "summary": final_packet
     }
+
+
+from fastapi.responses import FileResponse
+
+
+@app.get("/")
+def serve_dashboard():
+    return FileResponse("frontend/index.html")

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autonomous Fleet & Mission Planner</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0b1120;
+      color: #e2e8f0;
+    }
+    header {
+      background: #111827;
+      border-bottom: 1px solid #1e293b;
+      padding: 16px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      color: #38bdf8;
+      letter-spacing: 0.5px;
+    }
+    .badge {
+      background: #064e3b;
+      color: #34d399;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 24px;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 1rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+    select, button {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    button.primary {
+      background: #0284c7;
+      border-color: #0284c7;
+      font-weight: 600;
+    }
+    button.primary:hover { background: #0369a1; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(20, 1fr);
+      gap: 2px;
+      background: #1e293b;
+      padding: 4px;
+      border-radius: 8px;
+      aspect-ratio: 1 / 1;
+    }
+    .cell {
+      background: #0f172a;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .cell:hover { background: #334155; }
+    .cell.nofly { background: #dc2626; }
+    .cell.path { background: #10b981; }
+    .cell.start { background: #38bdf8; }
+    .cell.goal { background: #f59e0b; }
+    .legend {
+      display: flex;
+      gap: 16px;
+      font-size: 0.8rem;
+      margin-top: 12px;
+      color: #94a3b8;
+    }
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 6px;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .metric-box {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .metric-label { font-size: 0.75rem; color: #94a3b8; }
+    .metric-val { font-size: 1.2rem; font-weight: 700; color: #f8fafc; margin-top: 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    th { color: #94a3b8; }
+    @media (max-width: 850px) {
+      .container { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AUTONOMOUS FLEET & MISSION PLANNER</h1>
+    <span class="badge">C++ Engine + A* Pathfinder + ML Telemetry</span>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <h2>20x20 Tactical Airspace Grid (Click Cells to Toggle No-Fly Zones)</h2>
+      <div class="controls">
+        <select id="aircraftSelect">
+          <option value="VBAT-01">VBAT-01 (Tactical VTOL)</option>
+          <option value="VBAT-02">VBAT-02 (Reconnaissance)</option>
+          <option value="XBAT-01">XBAT-01 (Autonomous Fighter)</option>
+        </select>
+        <button class="primary" onclick="runSimulation()">Launch Autonomous Simulation</button>
+        <button onclick="clearObstacles()">Clear No-Fly Zones</button>
+      </div>
+      <div id="radarGrid" class="grid"></div>
+      <div class="legend">
+        <span><i class="dot" style="background:#38bdf8"></i>Launch (1,1)</span>
+        <span><i class="dot" style="background:#f59e0b"></i>Target (16,16)</span>
+        <span><i class="dot" style="background:#dc2626"></i>No-Fly Zone</span>
+        <span><i class="dot" style="background:#10b981"></i>A* Optimal Route</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Telemetry & ML Battery Forecast</h2>
+      <div class="metrics">
+        <div class="metric-box">
+          <div class="metric-label">Mission Status</div>
+          <div class="metric-val" id="mStatus">READY</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">A* Waypoints Computed</div>
+          <div class="metric-val" id="mWaypoints">--</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">Final Battery Level</div>
+          <div class="metric-val" id="mBattery">100.0%</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">ML Ticks Until RTL (20%)</div>
+          <div class="metric-val" id="mForecast">--</div>
+        </div>
+      </div>
+
+      <h2>Recent SQLite Mission Logs</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Aircraft</th>
+            <th>Waypoints</th>
+            <th>Battery</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="missionHistory"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const GRID_SIZE = 20;
+    const START = { x: 1, y: 1 };
+    const GOAL = { x: 16, y: 16 };
+    let noFlySet = new Set(Array.of("7,5", "7,6", "7,7", "7,8", "8,8", "9,8", "10,8"));
+    let pathSet = new Set();
+
+    function renderGrid() {
+      const grid = document.getElementById("radarGrid");
+      grid.innerHTML = "";
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const key = x + "," + y;
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          if (x === START.x && y === START.y) cell.classList.add("start");
+          else if (x === GOAL.x && y === GOAL.y) cell.classList.add("goal");
+          else if (noFlySet.has(key)) cell.classList.add("nofly");
+          else if (pathSet.has(key)) cell.classList.add("path");
+
+          cell.onclick = function() {
+            if ((x === START.x && y === START.y) || (x === GOAL.x && y === GOAL.y)) return;
+            if (noFlySet.has(key)) noFlySet.delete(key);
+            else noFlySet.add(key);
+            pathSet.clear();
+            renderGrid();
+          };
+          grid.appendChild(cell);
+        }
+      }
+    }
+
+    function clearObstacles() {
+      noFlySet.clear();
+      pathSet.clear();
+      renderGrid();
+    }
+
+    async function loadHistory() {
+      const res = await fetch("/api/missions");
+      const data = await res.json();
+      const tbody = document.getElementById("missionHistory");
+      tbody.innerHTML = "";
+      data.missions.slice(0, 6).forEach(function(m) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<td>#" + m.mission_id + "</td><td>" + m.aircraft_id + "</td><td>" + m.waypoint_count + "</td><td>" + m.final_battery_pct + "%</td><td>" + m.final_status + "</td>";
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function runSimulation() {
+      const aircraftId = document.getElementById("aircraftSelect").value;
+      const obstacles = Array.from(noFlySet).map(function(k) { return k.split(",").map(Number); });
+      const res = await fetch("/api/missions/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          aircraft_id: aircraftId,
+          start: Array.of(START.x, START.y),
+          goal: Array.of(GOAL.x, GOAL.y),
+          no_fly_zones: obstacles,
+          grid_size: GRID_SIZE
+        })
+      });
+      if (!res.ok) {
+        alert("No safe path around those no-fly zones! Remove an obstacle and try again.");
+        return;
+      }
+      const data = await res.json();
+      pathSet = new Set(data.waypoints.map(function(p) { return p.at(0) + "," + p.at(1); }));
+      renderGrid();
+
+      document.getElementById("mStatus").textContent = data.summary.status;
+      document.getElementById("mWaypoints").textContent = data.waypoints.length + " nodes";
+      document.getElementById("mBattery").textContent = data.summary.battery_pct + "%";
+      document.getElementById("mForecast").textContent =
+        data.ml_battery_forecast.estimated_ticks_remaining !== null
+          ? data.ml_battery_forecast.estimated_ticks_remaining + " ticks"
+          : "N/A";
+      loadHistory();
+    }
+
+    renderGrid();
+    loadHistory();
+  </script>
+</body>
+</html>
