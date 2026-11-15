@@ -27,4 +27,6 @@ pytest -v
 # 4. Launch the live web dashboard
 uvicorn backend.app:app --reload
 ```
-Open `http://127.0.0.1:8000` in your browser to place no-fly zones on the 20x20 airspace grid and run live simulations.
+Once the local server is running, open `http://127.0.0.1:8000` in your browser—or test the live cloud deployment anytime at **[https://autonomous-fleet-planner.onrender.com](https://autonomous-fleet-planner.onrender.com)**.
+
+
